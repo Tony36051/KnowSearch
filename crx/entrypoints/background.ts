@@ -1,16 +1,8 @@
-// entrypoints/background.ts
-import { defineBackground } from 'wxt';
-
 export default defineBackground(() => {
-  console.log('Background service worker started');
-
-  // 示例：监听浏览器点击图标事件
-  browser.action.onClicked.addListener(() => {
-    console.log('Extension icon clicked');
-  });
-
-  // 示例：定时任务
-  setInterval(() => {
-    console.log('Heartbeat from background');
-  }, 60_000);
+  // Modify the storage item in the background to demonstrate that the composable works
+  setInterval(async () => {
+    const oldValue = await storage.getItem<number>("session:count");
+    const newValue = (oldValue ?? 0) + 1;
+    await storage.setItem("session:count", newValue);
+  }, 1000);
 });

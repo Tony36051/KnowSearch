@@ -1,15 +1,9 @@
-// wxt.config.ts
-import { defineConfig } from 'wxt';
+import { defineConfig } from "wxt";
 
-const isDev = process.env.NODE_ENV === 'development';
-
+// See https://wxt.dev/api/config.html
 export default defineConfig({
+  modules: ["@wxt-dev/module-vue"],
   manifest: {
-    name: isDev ? '[DEV] My Extension' : 'My Extension',
-    description: 'A sample extension',
-    version: '1.0.0',
+    permissions: ["storage"],
   },
-  ...(isDev && {
-    persistentId: 'my-extension-dev-id',
-  }),
 });
