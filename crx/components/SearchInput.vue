@@ -3,7 +3,8 @@
     <input
       type="text"
       :value="modelValue"
-      @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
+      @input="onInput"
+      @compositionend="onCompositionEnd"
       placeholder="搜索你的浏览历史..."
       autofocus
     />
@@ -16,9 +17,21 @@ defineProps<{
   modelValue: string;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   'update:modelValue': [value: string];
 }>();
+
+let isComposing = false;
+
+function onInput(e: Event) {
+  if (isComposing) return;
+  emit('update:modelValue', (e.target as HTMLInputElement).value);
+}
+
+function onCompositionEnd(e: Event) {
+  isComposing = false;
+  emit('update:modelValue', (e.target as HTMLInputElement).value);
+}
 </script>
 
 <style scoped>

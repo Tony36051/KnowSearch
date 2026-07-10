@@ -1,8 +1,8 @@
 import { getDatabase, type PageRecord } from '@/lib/db';
-import type { CapturePagePayload, AppSettings, SearchPagesResponse } from '@/lib/messaging';
+import type { CapturePagePayload, AppSettings, SearchPagesResponse, PageContentResponse, PageTermsResponse, StorageEstimateResponse, GetAllPagesResponse, StorageStatsResponse } from '@/lib/messaging';
 
 const MSG_ERROR_KEY = '__knowsearch_error__';
-import { keywordSearch, buildSearchIndex } from '@/lib/search';
+import { keywordSearch, buildSearchIndex, tokenize } from '@/lib/search';
 import { performStorageCleanup, truncateText } from '@/lib/storage-manager';
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -48,6 +48,51 @@ export default defineBackground(() => {
     if (message.type === 'updateSettings') {
       updateSettings(message.data as Partial<AppSettings>)
         .then(() => sendResponse({ success: true }))
+        .catch(err);
+      return true;
+    }
+
+    if (message.type === 'clearAllData') {
+      clearAllData()
+        .then((result) => sendResponse(result))
+        .catch(err);
+      return true;
+    }
+
+    if (message.type === 'getPageContent') {
+      const { pageId } = message.data as { pageId: string };
+      getPageContent(pageId)
+        .then((result) => sendResponse(result))
+        .catch(err);
+      return true;
+    }
+
+    if (message.type === 'getPageTerms') {
+      const { pageId } = message.data as { pageId: string };
+      getPageTerms(pageId)
+        .then((result) => sendResponse(result))
+        .catch(err);
+      return true;
+    }
+
+    if (message.type === 'getStorageEstimate') {
+      const { pageId } = message.data as { pageId: string };
+      getStorageEstimate(pageId)
+        .then((result) => sendResponse(result))
+        .catch(err);
+      return true;
+    }
+
+    if (message.type === 'getAllPages') {
+      getAllPages()
+        .then((result) => sendResponse(result))
+        .catch(err);
+      return true;
+    }
+
+    if (message.type === 'getStorageStats') {
+      getStorageStats()
+        .then((result) => sendResponse(result))
         .catch(err);
       return true;
     }
@@ -186,4 +231,139 @@ async function clearAllData(): Promise<{ pagesDeleted: number; termsDeleted: num
   await clearTx.done;
 
   return { pagesDeleted, termsDeleted };
+}
+
+async function getPageContent(pageId: string): Promise<PageContentResponse | null> {
+  const db = await getDatabase();
+  const tx = db.transaction('pages', 'readonly');
+  const page = await tx.objectStore('pages').get(pageId);
+  await tx.done;
+  if (!page) return null;
+  return {
+    id: page.id, url: page.url, title: page.title, text: page.text,
+    excerpt: page.excerpt, siteName: page.siteName, favicon: page.favicon,
+    firstVisitedAt: page.firstVisitedAt, lastVisitedAt: page.lastVisitedAt,
+    visitCount: page.visitCount, textLength: page.textLength,
+  };
+}
+
+async function getPageTerms(pageId: string): Promise<PageTermsResponse> {
+  const db = await getDatabase();
+  const tx = db.transaction('pages', 'readonly');
+  const page = await tx.objectStore('pages').get(pageId);
+  await tx.done;
+  if (!page) return { terms: [] };
+  return { terms: tokenize(page.text) };
+}
+
+async function getStorageEstimate(pageId: string): Promise<StorageEstimateResponse> {
+  const db = await getDatabase();
+
+  const pageTx = db.transaction('pages', 'readonly');
+  const page = await pageTx.objectStore('pages').get(pageId);
+  await pageTx.done;
+
+  let pageRecordSize = 0;
+  let indexTermsSize = 0;
+  if (page) {
+    pageRecordSize += page.text.length * 2;
+    pageRecordSize += page.title.length * 2;
+    pageRecordSize += page.url.length * 2;
+    pageRecordSize += page.excerpt.length * 2;
+    pageRecordSize += (page.siteName?.length || 0) * 2;
+    pageRecordSize += (page.favicon?.length || 0) * 2;
+    pageRecordSize += page.contentHash.length * 2;
+    pageRecordSize += page.id.length * 2;
+    pageRecordSize += 64;
+
+    const terms = tokenize(page.text);
+    indexTermsSize = terms.length * 80; // 每个词项估算：term 字符串 + pageIds 数组 + 行开销
+  }
+
+  const estimate = await navigator.storage.estimate();
+  return {
+    pageRecordSize,
+    indexTermsSize,
+    totalDbUsage: estimate.usage || 0,
+    totalDbQuota: estimate.quota || 0,
+  };
+}
+
+async function getAllPages(): Promise<GetAllPagesResponse> {
+  const db = await getDatabase();
+  const tx = db.transaction('pages', 'readonly');
+  const store = tx.objectStore('pages');
+  const index = store.index('by-last-visited');
+  const records = await index.getAll();
+  await tx.done;
+
+  // 按 URL 去重：同一 URL 只保留最近访问的记录
+  const seen = new Map<string, typeof records[0]>();
+  for (const page of records) {
+    const existing = seen.get(page.url);
+    if (!existing || page.lastVisitedAt > existing.lastVisitedAt) {
+      seen.set(page.url, page);
+    }
+  }
+
+  const pages = [...seen.values()].map((page) => ({
+    id: page.id, url: page.url, title: page.title, text: page.text,
+    excerpt: page.excerpt, siteName: page.siteName, favicon: page.favicon,
+    firstVisitedAt: page.firstVisitedAt, lastVisitedAt: page.lastVisitedAt,
+    visitCount: page.visitCount, textLength: page.textLength,
+  }));
+  return { pages };
+}
+
+async function getStorageStats(): Promise<StorageStatsResponse> {
+  const db = await getDatabase();
+
+  const pagesTx = db.transaction('pages', 'readonly');
+  const pagesStore = pagesTx.objectStore('pages');
+  const pageCount = await pagesStore.count();
+  let totalTextLength = 0;
+  let pagesSize = 0;
+  let earliestVisitedAt = Infinity;
+  let latestVisitedAt = 0;
+  let cursor = await pagesStore.openCursor();
+  while (cursor) {
+    totalTextLength += cursor.value.textLength;
+    // 估算单条页面记录大小：各字符串字段 UTF-16 编码 + 固定开销
+    pagesSize += cursor.value.textLength * 2;
+    pagesSize += cursor.value.title.length * 2;
+    pagesSize += cursor.value.url.length * 2;
+    pagesSize += cursor.value.excerpt.length * 2;
+    pagesSize += (cursor.value.siteName?.length || 0) * 2;
+    pagesSize += (cursor.value.favicon?.length || 0) * 2;
+    pagesSize += cursor.value.contentHash.length * 2;
+    pagesSize += cursor.value.id.length * 2;
+    pagesSize += 64;
+    if (cursor.value.lastVisitedAt < earliestVisitedAt) earliestVisitedAt = cursor.value.lastVisitedAt;
+    if (cursor.value.lastVisitedAt > latestVisitedAt) latestVisitedAt = cursor.value.lastVisitedAt;
+    cursor = await cursor.continue();
+  }
+  await pagesTx.done;
+
+  const termsTx = db.transaction('search-terms', 'readonly');
+  const termsStore = termsTx.objectStore('search-terms');
+  const termCount = await termsStore.count();
+  let termsSize = 0;
+  let termCursor = await termsStore.openCursor();
+  while (termCursor) {
+    termsSize += termCursor.value.term.length * 2;
+    termsSize += termCursor.value.pageIds.length * 80; // UUID + 数组开销
+    termsSize += 32; // 行开销
+    termCursor = await termCursor.continue();
+  }
+  await termsTx.done;
+
+  return {
+    pageCount,
+    termCount,
+    totalTextLength,
+    earliestVisitedAt: pageCount > 0 ? earliestVisitedAt : 0,
+    latestVisitedAt,
+    pagesSize,
+    termsSize,
+  };
 }

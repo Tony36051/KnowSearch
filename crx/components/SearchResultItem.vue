@@ -9,6 +9,7 @@
     <div class="meta">
       访问于: {{ formatTime(result.lastVisitedAt) }}
       <span v-if="result.visitCount > 1">({{ result.visitCount }}次)</span>
+      <button class="view-indexed-btn" @click.stop="viewIndexedContent">索引内容</button>
     </div>
   </div>
 </template>
@@ -36,6 +37,10 @@ function formatTime(timestamp: number): string {
 
 function openPage() {
   browser.tabs.create({ url: props.result.url });
+}
+
+function viewIndexedContent() {
+  browser.tabs.create({ url: browser.runtime.getURL(`/indexed-content.html?id=${props.result.id}`) });
 }
 </script>
 
@@ -100,5 +105,23 @@ function openPage() {
   font-size: 11px;
   color: #aaa;
   margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.view-indexed-btn {
+  padding: 1px 6px;
+  font-size: 10px;
+  color: #4a90d9;
+  background: none;
+  border: 1px solid #4a90d9;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.view-indexed-btn:hover {
+  background: #4a90d9;
+  color: #fff;
 }
 </style>

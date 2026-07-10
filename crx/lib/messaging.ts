@@ -51,6 +51,53 @@ export interface AppSettings {
   excludePatterns: string[];
 }
 
+export interface GetPageContentPayload {
+  pageId: string;
+}
+
+export interface PageContentResponse {
+  id: string;
+  url: string;
+  title: string;
+  text: string;
+  excerpt: string;
+  siteName: string | null;
+  favicon: string | null;
+  firstVisitedAt: number;
+  lastVisitedAt: number;
+  visitCount: number;
+  textLength: number;
+}
+
+export interface GetPageTermsPayload {
+  pageId: string;
+}
+
+export interface PageTermsResponse {
+  terms: string[];
+}
+
+export interface StorageEstimateResponse {
+  pageRecordSize: number;
+  indexTermsSize: number;
+  totalDbUsage: number;
+  totalDbQuota: number;
+}
+
+export interface GetAllPagesResponse {
+  pages: PageContentResponse[];
+}
+
+export interface StorageStatsResponse {
+  pageCount: number;
+  termCount: number;
+  totalTextLength: number;
+  earliestVisitedAt: number;
+  latestVisitedAt: number;
+  pagesSize: number;
+  termsSize: number;
+}
+
 /** Internal error marker sent by background onMessage handler */
 const MSG_ERROR_KEY = '__knowsearch_error__';
 
