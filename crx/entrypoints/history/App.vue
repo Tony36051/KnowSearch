@@ -95,14 +95,24 @@ const dateRange = computed(() => {
   return `${earliest.toLocaleDateString('zh-CN')} ~ ${latest.toLocaleDateString('zh-CN')}`;
 });
 
+function loadMore() {
+  if (visibleCount.value < filteredPages.value.length) {
+    visibleCount.value += PAGE_SIZE;
+  }
+}
+
 function setupObserver() {
   if (observer) observer.disconnect();
   observer = new IntersectionObserver((entries) => {
-    if (entries[0]?.isIntersecting && visibleCount.value < filteredPages.value.length) {
-      visibleCount.value += PAGE_SIZE;
-    }
+    if (entries[0]?.isIntersecting) loadMore();
   }, { rootMargin: '200px' });
   if (loadMoreRef.value) observer.observe(loadMoreRef.value);
+}
+
+// Test bridge: allows integration tests to trigger load-more without
+// relying on IntersectionObserver (which Puppeteer cannot reliably fire).
+if (typeof window !== 'undefined') {
+  (window as any).__knowsearch_loadMore = loadMore;
 }
 
 onMounted(async () => {
