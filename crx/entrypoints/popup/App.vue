@@ -46,13 +46,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { sendMessage } from '@/lib/messaging';
-import type { PageContentResponse } from '@/lib/messaging';
+import type { PageSummaryResponse } from '@/lib/messaging';
 import SearchInput from '@/components/SearchInput.vue';
 import SettingsPanel from '@/components/SettingsPanel.vue';
 
 const PAGE_SIZE = 20;
 
-const allPages = ref<PageContentResponse[]>([]);
+const allPages = ref<PageSummaryResponse[]>([]);
 const pageLoading = ref(true);
 const pageError = ref<string | null>(null);
 const query = ref('');
@@ -84,7 +84,7 @@ function onScroll() {
 
 onMounted(async () => {
   try {
-    const res = await sendMessage<{ pages: PageContentResponse[] }>('getAllPages');
+    const res = await sendMessage<{ pages: PageSummaryResponse[] }>('getAllPages');
     allPages.value = res.pages.reverse();
   } catch {
     pageError.value = '加载失败';
@@ -106,11 +106,11 @@ function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString('zh-CN');
 }
 
-function openPage(page: PageContentResponse) {
+function openPage(page: PageSummaryResponse) {
   browser.tabs.create({ url: page.url });
 }
 
-function viewIndexedContent(page: PageContentResponse) {
+function viewIndexedContent(page: PageSummaryResponse) {
   browser.tabs.create({ url: browser.runtime.getURL(`/indexed-content.html?id=${page.id}`) });
 }
 

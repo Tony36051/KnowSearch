@@ -307,7 +307,7 @@ async function getAllPages(): Promise<GetAllPagesResponse> {
   }
 
   const pages = [...seen.values()].map((page) => ({
-    id: page.id, url: page.url, title: page.title, text: page.text,
+    id: page.id, url: page.url, title: page.title,
     excerpt: page.excerpt, siteName: page.siteName, favicon: page.favicon,
     firstVisitedAt: page.firstVisitedAt, lastVisitedAt: page.lastVisitedAt,
     visitCount: page.visitCount, textLength: page.textLength,

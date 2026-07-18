@@ -56,13 +56,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { sendMessage } from '@/lib/messaging';
-import type { PageContentResponse, StorageStatsResponse } from '@/lib/messaging';
+import type { PageSummaryResponse, StorageStatsResponse } from '@/lib/messaging';
 import SearchInput from '@/components/SearchInput.vue';
 import SettingsPanel from '@/components/SettingsPanel.vue';
 
 const PAGE_SIZE = 20;
 
-const allPages = ref<PageContentResponse[]>([]);
+const allPages = ref<PageSummaryResponse[]>([]);
 const loading = ref(true);
 const pageError = ref<string | null>(null);
 const query = ref('');
@@ -119,18 +119,18 @@ onMounted(async () => {
   loading.value = true;
   pageError.value = null;
   try {
-    const [pagesRes, statsRes] = await Promise.all([
-      sendMessage<{ pages: PageContentResponse[] }>('getAllPages'),
-      sendMessage<StorageStatsResponse>('getStorageStats'),
-    ]);
+    const pagesRes = await sendMessage<{ pages: PageSummaryResponse[] }>('getAllPages');
     allPages.value = pagesRes.pages.reverse();
-    stats.value = statsRes;
   } catch {
     pageError.value = '加载失败';
   } finally {
     loading.value = false;
   }
   setupObserver();
+  // 统计信息延迟加载，不阻塞页面列表渲染
+  sendMessage<StorageStatsResponse>('getStorageStats').then((res) => {
+    stats.value = res;
+  }).catch(() => {});
 });
 
 onBeforeUnmount(() => {
@@ -156,17 +156,16 @@ async function loadData() {
   loading.value = true;
   pageError.value = null;
   try {
-    const [pagesRes, statsRes] = await Promise.all([
-      sendMessage<{ pages: PageContentResponse[] }>('getAllPages'),
-      sendMessage<StorageStatsResponse>('getStorageStats'),
-    ]);
+    const pagesRes = await sendMessage<{ pages: PageSummaryResponse[] }>('getAllPages');
     allPages.value = pagesRes.pages.reverse();
-    stats.value = statsRes;
   } catch {
     pageError.value = '加载失败';
   } finally {
     loading.value = false;
   }
+  sendMessage<StorageStatsResponse>('getStorageStats').then((res) => {
+    stats.value = res;
+  }).catch(() => {});
 }
 
 function formatTime(timestamp: number): string {
@@ -188,11 +187,11 @@ function formatSize(bytes: number): string {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
-function openPage(page: PageContentResponse) {
+function openPage(page: PageSummaryResponse) {
   window.open(page.url, '_blank');
 }
 
-function viewIndexedContent(page: PageContentResponse) {
+function viewIndexedContent(page: PageSummaryResponse) {
   window.open(chrome.runtime.getURL(`/indexed-content.html?id=${page.id}`), '_blank');
 }
 </script>

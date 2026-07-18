@@ -55,6 +55,19 @@ export interface GetPageContentPayload {
   pageId: string;
 }
 
+export interface PageSummaryResponse {
+  id: string;
+  url: string;
+  title: string;
+  excerpt: string;
+  siteName: string | null;
+  favicon: string | null;
+  firstVisitedAt: number;
+  lastVisitedAt: number;
+  visitCount: number;
+  textLength: number;
+}
+
 export interface PageContentResponse {
   id: string;
   url: string;
@@ -85,7 +98,7 @@ export interface StorageEstimateResponse {
 }
 
 export interface GetAllPagesResponse {
-  pages: PageContentResponse[];
+  pages: PageSummaryResponse[];
 }
 
 export interface StorageStatsResponse {
