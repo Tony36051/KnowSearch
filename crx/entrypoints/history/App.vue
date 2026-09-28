@@ -86,6 +86,14 @@ const visiblePages = computed(() => filteredPages.value.slice(0, visibleCount.va
 
 watch(query, () => { visibleCount.value = PAGE_SIZE; });
 
+// 当列表加载完成或搜索条件变化导致"加载更多"哨兵重新渲染后，重新绑定 IntersectionObserver。
+// 使用 flush: 'post' 确保回调在 DOM 更新后执行，此时 loadMoreRef 已指向最新哨兵节点，
+// 避免 onMounted 中在 DOM 刷新前调用导致 observe 不到元素。
+watch([query, loading], () => {
+  if (loading.value) return;
+  setupObserver();
+}, { flush: 'post' });
+
 const dateRange = computed(() => {
   if (!stats.value || stats.value.pageCount === 0) return '';
   const earliest = new Date(stats.value.earliestVisitedAt);
@@ -126,7 +134,6 @@ onMounted(async () => {
   } finally {
     loading.value = false;
   }
-  setupObserver();
   // 统计信息延迟加载，不阻塞页面列表渲染
   sendMessage<StorageStatsResponse>('getStorageStats').then((res) => {
     stats.value = res;
